@@ -102,6 +102,29 @@ app.post('/admin/add-deal', async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
+
+// Get all deals (admin)
+app.get('/admin/deals', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, title, description, price, commission_percentage, merchant_id, image_url, active, created_at
+      FROM deals
+      ORDER BY created_at DESC
+    `);
+
+    res.json({
+      success: true,
+      deals: result.rows
+    });
+  } catch (err) {
+    console.error('Get deals error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
 // Listen on port
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
