@@ -2,7 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
-const bcrypt = require('bcrypt'); // added for password hashing
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 app.use(cors());
@@ -11,25 +12,22 @@ app.use(express.json());
 // PostgreSQL connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  ssl: { rejectUnauthorized: false }
 });
+
+// Helper function for login tokens
+function signToken(payload) {
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
+}
 
 // Test DB connection route
 app.get('/test-db', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW()');
-    res.json({
-      success: true,
-      serverTime: result.rows[0]
-    });
+    res.json({ success: true, serverTime: result.rows[0] });
   } catch (err) {
     console.error(err);
-    res.status(500).json({
-      success: false,
-      error: err.message
-    });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -38,7 +36,7 @@ app.get('/', (req, res) => {
   res.send('Marketplace backend running');
 });
 
-// 🔐 Admin login route
+// Admin login route
 app.post('/admin/login', async (req, res) => {
   const { email, password } = req.body;
 
@@ -63,7 +61,6 @@ app.post('/admin/login', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
 
-    // Successfully logged in
     res.json({
       success: true,
       message: 'Admin logged in successfully',
@@ -85,18 +82,13 @@ app.post('/admin/add-deal', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `INSERT INTO deals 
-        (title, description, price, commission_percentage, merchant_id, image_url) 
+      `INSERT INTO deals (title, description, price, commission_percentage, merchant_id, image_url)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
       [title, description || '', price, commission_percentage || 25, merchant_id, image_url || '']
     );
 
-    res.json({
-      success: true,
-      message: 'Deal added successfully',
-      deal: result.rows[0]
-    });
+    res.json({ success: true, message: 'Deal added successfully', deal: result.rows[0] });
   } catch (err) {
     console.error('Add deal error:', err);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -112,23 +104,81 @@ app.get('/admin/deals', async (req, res) => {
       ORDER BY created_at DESC
     `);
 
-    res.json({
-      success: true,
-      deals: result.rows
-    });
+    res.json({ success: true, deals: result.rows });
   } catch (err) {
     console.error('Get deals error:', err);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
+// Admin creates a merchant (NZBN + password)
+app.post('/admin/create-merchant', async (req, res) => {
+  const { name, nzbn, password } = req.body;
+
+  if (!name || !nzbn || !password) {
+    return res.status(400).json({ success: false, message: 'name, nzbn, password required' });
+  }
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const result = await pool.query(
+      `INSERT INTO users (name, nzbn, password, role)
+       VALUES ($1, $2, $3, 'merchant')
+       RETURNING id, name, nzbn, role`,
+      [name, nzbn, hashedPassword]
+    );
+
+    res.json({ success: true, merchant: result.rows[0] });
+  } catch (err) {
+    console.error('Create merchant error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Merchant login (NZBN + password)
+app.post('/merchant/login', async (req, res) => {
+  const { nzbn, password } = req.body;
+
+  if (!nzbn || !password) {
+    return res.status(400).json({ success: false, message: 'nzbn and password required' });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT id, name, nzbn, password
+       FROM users
+       WHERE nzbn = $1 AND role = 'merchant'`,
+      [nzbn]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ success: false, message: 'Invalid NZBN or password' });
+    }
+
+    const merchant = result.rows[0];
+    const ok = await bcrypt.compare(password, merchant.password);
+
+    if (!ok) {
+      return res.status(401).json({ success: false, message: 'Invalid NZBN or password' });
+    }
+
+    const token = signToken({ id: merchant.id, role: 'merchant' });
+
+    res.json({
+      success: true,
+      token,
+      merchant: { id: merchant.id, name: merchant.name, nzbn: merchant.nzbn }
+    });
+  } catch (err) {
+    console.error('Merchant login error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Check JWT secret is attached (safe true/false only)
 app.get('/check-jwt', (req, res) => {
-  res.json({
-    hasJwtSecret: !!process.env.JWT_SECRET
-  });
+  res.json({ hasJwtSecret: !!process.env.JWT_SECRET });
 });
 
 // Listen on port
