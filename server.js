@@ -125,6 +125,12 @@ app.get('/admin/deals', async (req, res) => {
   }
 });
 
+app.get('/check-jwt', (req, res) => {
+  res.json({
+    hasJwtSecret: !!process.env.JWT_SECRET
+  });
+});
+
 // Listen on port
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
