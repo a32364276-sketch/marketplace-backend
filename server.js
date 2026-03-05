@@ -226,11 +226,11 @@ app.post('/admin/issue-voucher', async (req, res) => {
     const secret = speakeasy.generateSecret({ length: 20 }).base32;
 
     const inserted = await pool.query(
-      `INSERT INTO vouchers (code, order_id, deal_id, public_id, secret)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, public_id`,
-      ['LEGACY', order_id, deal_id, public_id, secret]
-    );
+  `INSERT INTO vouchers (code, order_id, deal_id, public_id, secret)
+   VALUES ($1, $2, $3, $4, $5)
+   RETURNING id, public_id`,
+  [public_id, order_id, deal_id, public_id, secret]
+);
 
     const code_right_now = speakeasy.totp({
       secret,
