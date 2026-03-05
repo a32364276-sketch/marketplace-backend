@@ -340,6 +340,51 @@ app.get('/admin/migrate-vouchers-totp-v2', async (req, res) => {
   }
 });
 
+// TEMP: create a test order (so vouchers can reference a real order_id)
+app.post('/admin/create-test-order', async (req, res) => {
+  const { customer_id, deal_id, total_price } = req.body;
+  if (!customer_id || !deal_id || !total_price) {
+    return res.status(400).json({ success: false, message: 'customer_id, deal_id, total_price required' });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO orders (customer_id, deal_id, total_price)
+       VALUES ($1, $2, $3)
+       RETURNING id, customer_id, deal_id, total_price, created_at`,
+      [customer_id, deal_id, total_price]
+    );
+
+    res.json({ success: true, order: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// TEMP: create a test customer
+app.post('/admin/create-test-customer', async (req, res) => {
+  const { name, email } = req.body;
+  if (!name || !email) {
+    return res.status(400).json({ success: false, message: 'name and email required' });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO customers (name, email, oauth_provider)
+       VALUES ($1, $2, 'test')
+       ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
+       RETURNING id, name, email`,
+      [name, email]
+    );
+
+    res.json({ success: true, customer: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // Listen on port
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
