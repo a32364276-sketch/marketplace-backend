@@ -4,6 +4,8 @@ const cors = require('cors');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const speakeasy = require('speakeasy');
+const crypto = require('crypto');
 
 const app = express();
 app.use(cors());
@@ -18,6 +20,29 @@ const pool = new Pool({
 // Helper function for login tokens
 function signToken(payload) {
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
+}
+
+// Merchant auth middleware
+function requireMerchant(req, res, next) {
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  if (!token) return res.status(401).json({ success: false, message: 'Missing token' });
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded.role !== 'merchant') {
+      return res.status(403).json({ success: false, message: 'Merchant access only' });
+    }
+    req.merchant = decoded; // { id, role }
+    next();
+  } catch {
+    return res.status(401).json({ success: false, message: 'Invalid token' });
+  }
+}
+
+function generatePublicId() {
+  // Short, readable voucher reference (customer shows this)
+  return crypto.randomBytes(6).toString('hex').slice(0, 10).toUpperCase();
 }
 
 // Test DB connection route
@@ -67,7 +92,7 @@ app.post('/admin/login', async (req, res) => {
       admin: { id: admin.id, name: admin.name, email: admin.email }
     });
   } catch (err) {
-    console.error('Login error:', err);
+    console.error('Admin login error:', err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
@@ -85,7 +110,7 @@ app.post('/admin/add-deal', async (req, res) => {
       `INSERT INTO deals (title, description, price, commission_percentage, merchant_id, image_url)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [title, description || '', price, commission_percentage || 25, merchant_id, image_url || '']
+      [title, description || '', price, commission_percentage ?? 25, merchant_id, image_url || '']
     );
 
     res.json({ success: true, message: 'Deal added successfully', deal: result.rows[0] });
@@ -172,6 +197,111 @@ app.post('/merchant/login', async (req, res) => {
     });
   } catch (err) {
     console.error('Merchant login error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// ONE-TIME: add columns for rotating voucher codes (run once then remove)
+app.get('/admin/migrate-vouchers-totp', async (req, res) => {
+  try {
+    await pool.query(`ALTER TABLE vouchers ADD COLUMN IF NOT EXISTS public_id VARCHAR(20) UNIQUE;`);
+    await pool.query(`ALTER TABLE vouchers ADD COLUMN IF NOT EXISTS secret VARCHAR(255);`);
+    res.send('✅ vouchers table updated (public_id, secret)');
+  } catch (err) {
+    console.error(err);
+    res.status(500).send(err.message);
+  }
+});
+
+// TEMP: issue a voucher for testing (later this happens when customer pays)
+app.post('/admin/issue-voucher', async (req, res) => {
+  const { deal_id, order_id } = req.body;
+
+  if (!deal_id || !order_id) {
+    return res.status(400).json({ success: false, message: 'deal_id and order_id required' });
+  }
+
+  try {
+    const public_id = generatePublicId();
+    const secret = speakeasy.generateSecret({ length: 20 }).base32;
+
+    const inserted = await pool.query(
+      `INSERT INTO vouchers (code, order_id, deal_id, public_id, secret)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, public_id`,
+      ['LEGACY', order_id, deal_id, public_id, secret]
+    );
+
+    const code_right_now = speakeasy.totp({
+      secret,
+      encoding: 'base32',
+      step: 120 // 2 minutes
+    });
+
+    res.json({
+      success: true,
+      voucher: {
+        id: inserted.rows[0].id,
+        public_id: inserted.rows[0].public_id,
+        code_right_now
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Merchant redeems voucher (must belong to merchant's own deals)
+app.post('/merchant/redeem', requireMerchant, async (req, res) => {
+  const { public_id, code } = req.body;
+
+  if (!public_id || !code) {
+    return res.status(400).json({ success: false, message: 'public_id and code required' });
+  }
+
+  try {
+    const found = await pool.query(
+      `SELECT v.id AS voucher_id, v.redeemed, v.secret,
+              d.id AS deal_id, d.merchant_id
+       FROM vouchers v
+       JOIN deals d ON d.id = v.deal_id
+       WHERE v.public_id = $1`,
+      [public_id]
+    );
+
+    if (found.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Voucher not found' });
+    }
+
+    const row = found.rows[0];
+
+    // Only redeem vouchers for this merchant's own deals
+    if (Number(row.merchant_id) !== Number(req.merchant.id)) {
+      return res.status(403).json({ success: false, message: 'Not allowed to redeem other businesses vouchers' });
+    }
+
+    if (row.redeemed) {
+      return res.status(400).json({ success: false, message: 'Voucher already redeemed' });
+    }
+
+    const ok = speakeasy.totp.verify({
+      secret: row.secret,
+      encoding: 'base32',
+      token: String(code).trim(),
+      step: 120,
+      window: 1 // allow previous/next 2-min window
+    });
+
+    if (!ok) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired code' });
+    }
+
+    await pool.query(`UPDATE vouchers SET redeemed = TRUE, redeemed_at = NOW() WHERE id = $1`, [row.voucher_id]);
+
+    res.json({ success: true, message: 'Voucher redeemed ✅' });
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
