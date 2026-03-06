@@ -435,8 +435,8 @@ app.post('/checkout/create-session', async (req, res) => {
           quantity: 1,
         },
       ],
-      success_url: 'https://marketplace-backend-296c.onrender.com/checkout/success',
-      cancel_url: 'https://marketplace-backend-296c.onrender.com/checkout/cancel',
+      success_url: "http://localhost:3000/success",
+      cancel_url: "http://localhost:3000",
       metadata: {
         deal_id: String(deal_id),
         customer_id: String(customer_id),
