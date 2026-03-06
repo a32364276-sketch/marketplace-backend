@@ -543,6 +543,40 @@ app.get('/voucher/:public_id/code', async (req, res) => {
   }
 });
 
+app.get('/customer/vouchers', async (req, res) => {
+  const customer_id = Number(req.query.customer_id);
+
+  if (!customer_id) {
+    return res.status(400).json({ success: false, message: 'customer_id required' });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT
+         v.id,
+         v.public_id,
+         v.redeemed,
+         v.redeemed_at,
+         v.created_at,
+         d.title,
+         d.description,
+         d.price,
+         d.image_url
+       FROM vouchers v
+       JOIN orders o ON o.id = v.order_id
+       JOIN deals d ON d.id = v.deal_id
+       WHERE o.customer_id = $1
+       ORDER BY v.created_at DESC`,
+      [customer_id]
+    );
+
+    res.json({ success: true, vouchers: result.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // Listen on port
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
