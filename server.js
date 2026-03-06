@@ -6,6 +6,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const speakeasy = require('speakeasy');
 const crypto = require('crypto');
+const Stripe = require('stripe');
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
 app.use(cors());
@@ -384,6 +386,62 @@ app.post('/admin/create-test-customer', async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 });
+
+// Create Stripe Checkout session (customer starts purchase)
+app.post('/checkout/create-session', async (req, res) => {
+  const { deal_id, customer_id } = req.body;
+
+  if (!deal_id || !customer_id) {
+    return res.status(400).json({ success: false, message: 'deal_id and customer_id required' });
+  }
+
+  try {
+    const dealRes = await pool.query(
+      `SELECT id, title, price, active
+       FROM deals
+       WHERE id = $1`,
+      [deal_id]
+    );
+
+    if (dealRes.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Deal not found' });
+    }
+
+    const deal = dealRes.rows[0];
+    if (!deal.active) {
+      return res.status(400).json({ success: false, message: 'Deal is not active' });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: 'nzd',
+            product_data: { name: deal.title },
+            unit_amount: Math.round(Number(deal.price) * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: 'https://marketplace-backend-296c.onrender.com/checkout/success',
+      cancel_url: 'https://marketplace-backend-296c.onrender.com/checkout/cancel',
+      metadata: {
+        deal_id: String(deal_id),
+        customer_id: String(customer_id),
+      },
+    });
+
+    res.json({ success: true, checkout_url: session.url });
+  } catch (err) {
+    console.error('Stripe error:', err);
+    res.status(500).json({ success: false, message: 'Stripe session failed' });
+  }
+});
+
+app.get('/checkout/success', (req, res) => res.send('✅ Payment success'));
+app.get('/checkout/cancel', (req, res) => res.send('❌ Payment cancelled'));
 
 // Listen on port
 const PORT = process.env.PORT || 5000;
