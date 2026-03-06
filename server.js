@@ -577,6 +577,33 @@ app.get('/customer/vouchers', async (req, res) => {
   }
 });
 
+// Public: list all active deals
+app.get('/deals', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT
+        id,
+        title,
+        description,
+        price,
+        image_url,
+        merchant_id,
+        created_at
+       FROM deals
+       WHERE active = TRUE
+       ORDER BY created_at DESC`
+    );
+
+    res.json({
+      success: true,
+      deals: result.rows
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // Listen on port
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
