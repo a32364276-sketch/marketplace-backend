@@ -665,6 +665,26 @@ app.get('/merchant/redemptions', requireMerchant, async (req, res) => {
   }
 });
 
+// Public: list all categories
+app.get('/categories', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, name
+       FROM categories
+       ORDER BY name`
+    );
+
+    res.json({
+      success: true,
+      categories: result.rows
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // Listen on port
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
