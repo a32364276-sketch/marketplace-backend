@@ -580,19 +580,22 @@ app.get('/customer/vouchers', async (req, res) => {
 // Public: list all active deals
 app.get('/deals', async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT
-        id,
-        title,
-        description,
-        price,
-        image_url,
-        merchant_id,
-        created_at
-       FROM deals
-       WHERE active = TRUE
-       ORDER BY created_at DESC`
-    );
+const result = await pool.query(
+  `SELECT
+    d.id,
+    d.title,
+    d.description,
+    d.price,
+    d.image_url,
+    d.merchant_id,
+    d.category_id,
+    c.name AS category_name,
+    d.created_at
+   FROM deals d
+   LEFT JOIN categories c ON c.id = d.category_id
+   WHERE d.active = TRUE
+   ORDER BY d.created_at DESC`
+);
 
     res.json({
       success: true,
