@@ -604,6 +604,40 @@ app.get('/deals', async (req, res) => {
   }
 });
 
+// Public: get a single deal
+app.get('/deals/:id', async (req, res) => {
+  const deal_id = Number(req.params.id);
+
+  try {
+    const result = await pool.query(
+      `SELECT
+        id,
+        title,
+        description,
+        price,
+        image_url,
+        merchant_id,
+        created_at
+       FROM deals
+       WHERE id = $1 AND active = TRUE`,
+      [deal_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Deal not found' });
+    }
+
+    res.json({
+      success: true,
+      deal: result.rows[0]
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // Listen on port
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
