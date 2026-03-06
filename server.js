@@ -11,7 +11,13 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({
+  verify: (req, res, buf) => {
+    if (req.originalUrl === '/stripe/webhook') {
+      req.rawBody = buf;
+    }
+  }
+}));
 
 // PostgreSQL connection
 const pool = new Pool({
@@ -446,6 +452,58 @@ app.post('/checkout/create-session', async (req, res) => {
 
 app.get('/checkout/success', (req, res) => res.send('✅ Payment success'));
 app.get('/checkout/cancel', (req, res) => res.send('❌ Payment cancelled'));
+
+app.post('/stripe/webhook', async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(
+      req.rawBody,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+  } catch (err) {
+    console.error('Stripe webhook error:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+
+    const deal_id = Number(session.metadata.deal_id);
+    const customer_id = Number(session.metadata.customer_id);
+
+    const dealRes = await pool.query(
+      `SELECT id, price FROM deals WHERE id = $1`,
+      [deal_id]
+    );
+
+    const deal = dealRes.rows[0];
+
+    const orderRes = await pool.query(
+      `INSERT INTO orders (customer_id, deal_id, total_price, stripe_session_id, payment_status)
+       VALUES ($1, $2, $3, $4, 'paid')
+       RETURNING id`,
+      [customer_id, deal_id, deal.price, session.id]
+    );
+
+    const order_id = orderRes.rows[0].id;
+
+    const public_id = generatePublicId();
+    const secret = speakeasy.generateSecret({ length: 20 }).base32;
+
+    await pool.query(
+      `INSERT INTO vouchers (code, order_id, deal_id, public_id, secret)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [public_id, order_id, deal_id, public_id, secret]
+    );
+
+    console.log('Voucher created from Stripe payment');
+  }
+
+  res.json({ received: true });
+});
 
 // Listen on port
 const PORT = process.env.PORT || 5000;
