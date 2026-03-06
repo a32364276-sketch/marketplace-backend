@@ -691,6 +691,38 @@ app.get('/categories', async (req, res) => {
   }
 });
 
+app.post('/customer/login', async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ success: false, message: 'email required' });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT id, name, email
+       FROM customers
+       WHERE email = $1
+       LIMIT 1`,
+      [email]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Customer not found' });
+    }
+
+    const customer = result.rows[0];
+
+    res.json({
+      success: true,
+      customer
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // Listen on port
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
