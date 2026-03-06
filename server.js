@@ -313,6 +313,10 @@ app.get('/check-jwt', (req, res) => {
   res.json({ hasJwtSecret: !!process.env.JWT_SECRET });
 });
 
+app.get('/check-stripe', (req, res) => {
+  res.json({ hasStripeKey: !!process.env.STRIPE_SECRET_KEY });
+});
+
 // ONE-TIME: safer migration for voucher rotating codes (run once then remove)
 app.get('/admin/migrate-vouchers-totp-v2', async (req, res) => {
   try {
