@@ -505,6 +505,44 @@ app.post('/stripe/webhook', async (req, res) => {
   res.json({ received: true });
 });
 
+app.get('/voucher/:public_id/code', async (req, res) => {
+  const { public_id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `SELECT id, public_id, secret, redeemed
+       FROM vouchers
+       WHERE public_id = $1`,
+      [public_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Voucher not found' });
+    }
+
+    const voucher = result.rows[0];
+
+    if (voucher.redeemed) {
+      return res.status(400).json({ success: false, message: 'Voucher already redeemed' });
+    }
+
+    const code = speakeasy.totp({
+      secret: voucher.secret,
+      encoding: 'base32',
+      step: 120
+    });
+
+    res.json({
+      success: true,
+      public_id: voucher.public_id,
+      code
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // Listen on port
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
