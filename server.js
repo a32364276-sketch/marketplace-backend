@@ -638,6 +638,33 @@ app.get('/deals/:id', async (req, res) => {
   }
 });
 
+app.get('/merchant/redemptions', requireMerchant, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT
+         v.id,
+         v.public_id,
+         v.redeemed,
+         v.redeemed_at,
+         d.title,
+         d.price,
+         o.customer_id
+       FROM vouchers v
+       JOIN deals d ON d.id = v.deal_id
+       JOIN orders o ON o.id = v.order_id
+       WHERE d.merchant_id = $1
+         AND v.redeemed = TRUE
+       ORDER BY v.redeemed_at DESC`,
+      [req.merchant.id]
+    );
+
+    res.json({ success: true, redemptions: result.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // Listen on port
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
