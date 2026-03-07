@@ -19,6 +19,29 @@ app.use(express.json({
   }
 }));
 
+function authenticateCustomer(req, res, next) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ success: false, message: "Missing token" });
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    if (decoded.role !== "customer") {
+      return res.status(403).json({ success: false, message: "Invalid role" });
+    }
+
+    req.customer = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ success: false, message: "Invalid token" });
+  }
+}
+
 // PostgreSQL connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -398,8 +421,9 @@ app.post('/admin/create-test-customer', async (req, res) => {
 });
 
 // Create Stripe Checkout session (customer starts purchase)
-app.post('/checkout/create-session', async (req, res) => {
-  const { deal_id, customer_id } = req.body;
+app.post('/checkout/create-session', authenticateCustomer, async (req, res) => {
+const { deal_id } = req.body;
+const customerId = req.customer.id;
 
   if (!deal_id || !customer_id) {
     return res.status(400).json({ success: false, message: 'deal_id and customer_id required' });
@@ -505,16 +529,19 @@ app.post('/stripe/webhook', async (req, res) => {
   res.json({ received: true });
 });
 
-app.get('/voucher/:public_id/code', async (req, res) => {
+app.get('/voucher/:public_id/code', authenticateCustomer, async (req, res) => {
   const { public_id } = req.params;
+const customerId = req.customer.id;
 
   try {
-    const result = await pool.query(
-      `SELECT id, public_id, secret, redeemed
-       FROM vouchers
-       WHERE public_id = $1`,
-      [public_id]
-    );
+  const result = await pool.query(
+  `SELECT v.id, v.public_id, v.secret, v.redeemed
+   FROM vouchers v
+   JOIN orders o ON o.id = v.order_id
+   WHERE v.public_id = $1
+   AND o.customer_id = $2`,
+  [public_id, customerId]
+);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Voucher not found' });
@@ -543,12 +570,9 @@ app.get('/voucher/:public_id/code', async (req, res) => {
   }
 });
 
-app.get('/customer/vouchers', async (req, res) => {
-  const customer_id = Number(req.query.customer_id);
+app.get('/customer/vouchers', authenticateCustomer, async (req, res) => {
 
-  if (!customer_id) {
-    return res.status(400).json({ success: false, message: 'customer_id required' });
-  }
+  const customerId = req.customer.id;
 
   try {
     const result = await pool.query(
@@ -567,7 +591,7 @@ app.get('/customer/vouchers', async (req, res) => {
        JOIN deals d ON d.id = v.deal_id
        WHERE o.customer_id = $1
        ORDER BY v.created_at DESC`,
-      [customer_id]
+      [customerId]
     );
 
     res.json({ success: true, vouchers: result.rows });
@@ -713,10 +737,22 @@ app.post('/customer/login', async (req, res) => {
 
     const customer = result.rows[0];
 
+    const token = jwt.sign(
+      {
+        id: customer.id,
+        email: customer.email,
+        role: "customer"
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
     res.json({
       success: true,
+      token,
       customer
     });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: 'Server error' });
