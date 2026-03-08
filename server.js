@@ -560,9 +560,11 @@ const customerId = req.customer.id;
     });
 
     res.json({
-      success: true,
-      public_id: voucher.public_id,
-      code
+  public_id: voucher.public_id,
+  code,
+  expiresIn,
+  redeemed: voucher.redeemed
+});
     });
   } catch (err) {
     console.error(err);
