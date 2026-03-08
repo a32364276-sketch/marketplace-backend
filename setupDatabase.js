@@ -64,6 +64,30 @@ try {
   await pool.query(`ALTER TABLE customers ADD COLUMN marketing_sms_consent BOOLEAN DEFAULT false`);
 } catch (err) {}
 
+try {
+  await pool.query(`ALTER TABLE customers ADD COLUMN email_verification_code TEXT`);
+} catch (err) {}
+
+try {
+  await pool.query(`ALTER TABLE customers ADD COLUMN email_verification_expires TIMESTAMP`);
+} catch (err) {}
+
+try {
+  await pool.query(`ALTER TABLE customers ADD COLUMN phone_verification_code TEXT`);
+} catch (err) {}
+
+try {
+  await pool.query(`ALTER TABLE customers ADD COLUMN phone_verification_expires TIMESTAMP`);
+} catch (err) {}
+
+try {
+  await pool.query(`ALTER TABLE customers ADD COLUMN password_reset_code TEXT`);
+} catch (err) {}
+
+try {
+  await pool.query(`ALTER TABLE customers ADD COLUMN password_reset_expires TIMESTAMP`);
+} catch (err) {}
+
     // 3️⃣ Deals table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS deals (
