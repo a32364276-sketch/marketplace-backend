@@ -806,15 +806,15 @@ app.post('/customer/signup', async (req, res) => {
 });
 
 app.post('/customer/login', async (req, res) => {
-  const { email } = req.body;
+  const { email, password } = req.body;
 
-  if (!email) {
-    return res.status(400).json({ success: false, message: 'email required' });
+  if (!email || !password) {
+    return res.status(400).json({ success: false, message: 'email and password required' });
   }
 
   try {
     const result = await pool.query(
-      `SELECT id, name, email
+      `SELECT id, name, email, password
        FROM customers
        WHERE email = $1
        LIMIT 1`,
@@ -826,6 +826,16 @@ app.post('/customer/login', async (req, res) => {
     }
 
     const customer = result.rows[0];
+
+    if (!customer.password) {
+      return res.status(400).json({ success: false, message: 'This account does not have a password set' });
+    }
+
+    const passwordMatch = await bcrypt.compare(password, customer.password);
+
+    if (!passwordMatch) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    }
 
     const token = jwt.sign(
       {
@@ -840,8 +850,18 @@ app.post('/customer/login', async (req, res) => {
     res.json({
       success: true,
       token,
-      customer
+      customer: {
+        id: customer.id,
+        name: customer.name,
+        email: customer.email
+      }
     });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
 
   } catch (err) {
     console.error(err);
