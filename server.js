@@ -805,6 +805,56 @@ app.post('/customer/signup', async (req, res) => {
   }
 });
 
+app.post('/customer/request-password-reset', async (req, res) => {
+  const { email, phone_number, method } = req.body;
+
+  if (!method || (method !== "email" && method !== "phone")) {
+    return res.status(400).json({ success: false, message: "Valid method required" });
+  }
+
+  if (method === "email" && !email) {
+    return res.status(400).json({ success: false, message: "Email required" });
+  }
+
+  if (method === "phone" && !phone_number) {
+    return res.status(400).json({ success: false, message: "Phone number required" });
+  }
+
+  try {
+    const result = await pool.query(
+      method === "email"
+        ? `SELECT * FROM customers WHERE email = $1 LIMIT 1`
+        : `SELECT * FROM customers WHERE phone_number = $1 LIMIT 1`,
+      [method === "email" ? email : phone_number]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Customer not found" });
+    }
+
+    const customer = result.rows[0];
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const expires = new Date(Date.now() + 10 * 60 * 1000);
+
+    await pool.query(
+      `UPDATE customers
+       SET password_reset_code = $1,
+           password_reset_expires = $2
+       WHERE id = $3`,
+      [code, expires, customer.id]
+    );
+
+    res.json({
+      success: true,
+      message: `Reset code generated for ${method}`,
+      code
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
 app.post('/customer/login', async (req, res) => {
   const { email, password } = req.body;
 
