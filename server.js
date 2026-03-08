@@ -549,6 +549,14 @@ const customerId = req.customer.id;
 
     const voucher = result.rows[0];
 
+if (!voucher) {
+  return res.status(404).json({ success: false, message: "Voucher not found" });
+}
+
+if (voucher.redeemed) {
+  return res.status(400).json({ success: false, message: "Voucher already redeemed" });
+}
+
     if (voucher.redeemed) {
       return res.status(400).json({ success: false, message: 'Voucher already redeemed' });
     }
