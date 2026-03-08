@@ -855,6 +855,60 @@ app.post('/customer/request-password-reset', async (req, res) => {
   }
 });
 
+app.post('/customer/reset-password', async (req, res) => {
+  const { email, phone_number, code, new_password } = req.body;
+
+  if ((!email && !phone_number) || !code || !new_password) {
+    return res.status(400).json({
+      success: false,
+      message: "email or phone_number, code and new_password required"
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      email
+        ? `SELECT * FROM customers WHERE email = $1 LIMIT 1`
+        : `SELECT * FROM customers WHERE phone_number = $1 LIMIT 1`,
+      [email || phone_number]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Customer not found" });
+    }
+
+    const customer = result.rows[0];
+
+    if (!customer.password_reset_code || customer.password_reset_code !== code) {
+      return res.status(400).json({ success: false, message: "Invalid reset code" });
+    }
+
+    if (!customer.password_reset_expires || new Date(customer.password_reset_expires) < new Date()) {
+      return res.status(400).json({ success: false, message: "Reset code expired" });
+    }
+
+    const hashedPassword = await bcrypt.hash(new_password, 10);
+
+    await pool.query(
+      `UPDATE customers
+       SET password = $1,
+           password_reset_code = NULL,
+           password_reset_expires = NULL
+       WHERE id = $2`,
+      [hashedPassword, customer.id]
+    );
+
+    res.json({
+      success: true,
+      message: "Password reset successful"
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
 app.post('/customer/login', async (req, res) => {
   const { email, password } = req.body;
 
