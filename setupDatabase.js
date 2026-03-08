@@ -21,17 +21,48 @@ async function setup() {
       )
     `);
 
-    // 2️⃣ Customers table (Google/Apple OAuth users)
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS customers (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(100),
-        email VARCHAR(100) UNIQUE,
-        oauth_provider VARCHAR(20),
-        oauth_id VARCHAR(255) UNIQUE,
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
+// 2️⃣ Customers table
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS customers (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    email VARCHAR(100) UNIQUE,
+    phone_number VARCHAR(20) UNIQUE,
+    password TEXT,
+    oauth_provider VARCHAR(20),
+    oauth_id VARCHAR(255) UNIQUE,
+    email_verified BOOLEAN DEFAULT false,
+    phone_verified BOOLEAN DEFAULT false,
+    marketing_email_consent BOOLEAN DEFAULT false,
+    marketing_sms_consent BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT NOW()
+  )
+`);
+
+// Add new columns safely
+try {
+  await pool.query(`ALTER TABLE customers ADD COLUMN phone_number VARCHAR(20) UNIQUE`);
+} catch (err) {}
+
+try {
+  await pool.query(`ALTER TABLE customers ADD COLUMN password TEXT`);
+} catch (err) {}
+
+try {
+  await pool.query(`ALTER TABLE customers ADD COLUMN email_verified BOOLEAN DEFAULT false`);
+} catch (err) {}
+
+try {
+  await pool.query(`ALTER TABLE customers ADD COLUMN phone_verified BOOLEAN DEFAULT false`);
+} catch (err) {}
+
+try {
+  await pool.query(`ALTER TABLE customers ADD COLUMN marketing_email_consent BOOLEAN DEFAULT false`);
+} catch (err) {}
+
+try {
+  await pool.query(`ALTER TABLE customers ADD COLUMN marketing_sms_consent BOOLEAN DEFAULT false`);
+} catch (err) {}
 
     // 3️⃣ Deals table
     await pool.query(`
