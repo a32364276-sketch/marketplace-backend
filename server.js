@@ -728,6 +728,83 @@ app.get('/categories', async (req, res) => {
   }
 });
 
+// Customer signup
+app.post('/customer/signup', async (req, res) => {
+  const { name, email, phone_number, password, marketing_email_consent } = req.body;
+
+  if (!name || !email || !phone_number || !password) {
+    return res.status(400).json({
+      success: false,
+      message: "name, email, phone number and password required"
+    });
+  }
+
+  try {
+
+    // check email exists
+    const emailCheck = await pool.query(
+      `SELECT id FROM customers WHERE email = $1`,
+      [email]
+    );
+
+    if (emailCheck.rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Email already registered"
+      });
+    }
+
+    // check phone exists
+    const phoneCheck = await pool.query(
+      `SELECT id FROM customers WHERE phone_number = $1`,
+      [phone_number]
+    );
+
+    if (phoneCheck.rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number already registered"
+      });
+    }
+
+    // hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const result = await pool.query(
+      `INSERT INTO customers
+       (name, email, phone_number, password, marketing_email_consent)
+       VALUES ($1,$2,$3,$4,$5)
+       RETURNING id, name, email`,
+      [name, email, phone_number, hashedPassword, marketing_email_consent || false]
+    );
+
+    const customer = result.rows[0];
+
+    const token = jwt.sign(
+      {
+        id: customer.id,
+        email: customer.email,
+        role: "customer"
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.json({
+      success: true,
+      token,
+      customer
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+});
+
 app.post('/customer/login', async (req, res) => {
   const { email } = req.body;
 
