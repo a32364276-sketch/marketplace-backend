@@ -988,7 +988,6 @@ app.get("/create-test-merchant", async (req, res) => {
     const name = "Test Merchant";
     const nzbn = "9429041234567";
     const password = "test1234";
-
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const existingMerchant = await pool.query(
@@ -997,9 +996,14 @@ app.get("/create-test-merchant", async (req, res) => {
     );
 
     if (existingMerchant.rows.length > 0) {
+      await pool.query(
+        "UPDATE users SET name = $1, password = $2, role = $3 WHERE nzbn = $4",
+        [name, hashedPassword, "merchant", nzbn]
+      );
+
       return res.json({
         success: true,
-        message: "Merchant already exists",
+        message: "Merchant updated successfully",
         nzbn,
         password,
       });
@@ -1016,7 +1020,6 @@ app.get("/create-test-merchant", async (req, res) => {
       nzbn,
       password,
     });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({
