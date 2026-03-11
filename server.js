@@ -192,43 +192,57 @@ app.post('/admin/create-merchant', async (req, res) => {
   }
 });
 
-// Merchant login (NZBN + password)
-app.post('/merchant/login', async (req, res) => {
-  const { nzbn, password } = req.body;
-
-  if (!nzbn || !password) {
-    return res.status(400).json({ success: false, message: 'nzbn and password required' });
-  }
-
+app.post("/merchant/login", async (req, res) => {
   try {
+    const { nzbn, password } = req.body;
+
     const result = await pool.query(
-      `SELECT id, name, nzbn, password
-       FROM users
-       WHERE nzbn = $1 AND role = 'merchant'`,
-      [nzbn]
+      "SELECT * FROM users WHERE nzbn = $1 AND role = $2",
+      [nzbn, "merchant"]
     );
 
     if (result.rows.length === 0) {
-      return res.status(401).json({ success: false, message: 'Invalid NZBN or password' });
+      return res.status(401).json({
+        success: false,
+        message: "Invalid NZBN or password",
+      });
     }
 
     const merchant = result.rows[0];
-    const ok = await bcrypt.compare(password, merchant.password);
 
-    if (!ok) {
-      return res.status(401).json({ success: false, message: 'Invalid NZBN or password' });
+    const passwordMatch = await bcrypt.compare(password, merchant.password);
+
+    if (!passwordMatch) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid NZBN or password",
+      });
     }
 
-    const token = signToken({ id: merchant.id, role: 'merchant' });
+    const token = jwt.sign(
+      {
+        id: merchant.id,
+        role: "merchant",
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
 
     res.json({
       success: true,
       token,
-      merchant: { id: merchant.id, name: merchant.name, nzbn: merchant.nzbn }
+      merchant: {
+        id: merchant.id,
+        name: merchant.name,
+        nzbn: merchant.nzbn,
+      },
     });
   } catch (err) {
-    console.error('Merchant login error:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 });
 
@@ -964,6 +978,51 @@ app.post('/customer/login', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.get("/create-test-merchant", async (req, res) => {
+  try {
+    const bcrypt = require("bcrypt");
+
+    const name = "Test Merchant";
+    const nzbn = "9429041234567";
+    const password = "test1234";
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const existingMerchant = await pool.query(
+      "SELECT * FROM users WHERE nzbn = $1",
+      [nzbn]
+    );
+
+    if (existingMerchant.rows.length > 0) {
+      return res.json({
+        success: true,
+        message: "Merchant already exists",
+        nzbn,
+        password,
+      });
+    }
+
+    await pool.query(
+      "INSERT INTO users (name, nzbn, password, role) VALUES ($1, $2, $3, $4)",
+      [name, nzbn, hashedPassword, "merchant"]
+    );
+
+    res.json({
+      success: true,
+      message: "Test merchant created",
+      nzbn,
+      password,
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Error creating merchant",
+    });
   }
 });
 
