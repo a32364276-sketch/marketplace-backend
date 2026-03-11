@@ -1029,6 +1029,66 @@ app.get("/create-test-merchant", async (req, res) => {
   }
 });
 
+app.get("/create-test-deal", async (req, res) => {
+  try {
+    const merchantResult = await pool.query(
+      "SELECT id FROM users WHERE nzbn = $1 AND role = $2",
+      ["9429041234567", "merchant"]
+    );
+
+    if (merchantResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Test merchant not found",
+      });
+    }
+
+    const merchantId = merchantResult.rows[0].id;
+
+    const categoryResult = await pool.query(
+      "SELECT id FROM categories ORDER BY id ASC LIMIT 1"
+    );
+
+    if (categoryResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No category found. Create a category first.",
+      });
+    }
+
+    const categoryId = categoryResult.rows[0].id;
+
+    const dealResult = await pool.query(
+      `INSERT INTO deals
+       (title, description, price, commission_percentage, merchant_id, category_id, image_url, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [
+        "Test Merchant Deal",
+        "Test deal for merchant redemption flow",
+        25.00,
+        10,
+        merchantId,
+        categoryId,
+        "https://via.placeholder.com/300",
+        true
+      ]
+    );
+
+    res.json({
+      success: true,
+      message: "Test deal created",
+      deal: dealResult.rows[0],
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Error creating test deal",
+    });
+  }
+});
+
 // Listen on port
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
