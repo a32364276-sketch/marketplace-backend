@@ -437,7 +437,7 @@ app.post('/admin/create-test-customer', async (req, res) => {
 // Create Stripe Checkout session (customer starts purchase)
 app.post('/checkout/create-session', authenticateCustomer, async (req, res) => {
 const { deal_id } = req.body;
-const customerId = req.customer.id;
+const customer_id = req.customer.id;
 
   if (!deal_id || !customer_id) {
     return res.status(400).json({ success: false, message: 'deal_id and customer_id required' });
