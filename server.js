@@ -127,7 +127,7 @@ app.post('/admin/login', async (req, res) => {
 
 // Add a new deal (admin only)
 app.post('/admin/add-deal', async (req, res) => {
-  const { title, description, price, commission_percentage, merchant_id, image_url } = req.body;
+  const { title, description, price, commission_percentage, merchant_id, image_url, inventory_limit } = req.body;
 
 const commission = Number(commission_percentage);
 
@@ -144,10 +144,10 @@ if (commission < 0 || commission > 100) {
 
   try {
     const result = await pool.query(
-      `INSERT INTO deals (title, description, price, commission_percentage, merchant_id, image_url)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING *`,
-      [title, description || '', price, commission_percentage ?? 25, merchant_id, image_url || '']
+      `INSERT INTO deals (title, description, price, commission_percentage, merchant_id, image_url, inventory_limit)
+ VALUES ($1, $2, $3, $4, $5, $6, $7)
+ RETURNING *`,
+      [title, description || '', price, commission, merchant_id, image_url || '', inventory_limit]
     );
 
     res.json({ success: true, message: 'Deal added successfully', deal: result.rows[0] });
