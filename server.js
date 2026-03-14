@@ -331,6 +331,13 @@ app.post('/merchant/redeem', requireMerchant, async (req, res) => {
       return res.status(403).json({ success: false, message: 'Not allowed to redeem other businesses vouchers' });
     }
 
+if (row.expires_at && new Date(row.expires_at) < new Date()) {
+  return res.status(400).json({
+    success: false,
+    message: 'Voucher has expired'
+  });
+}
+
     if (row.redeemed) {
       return res.status(400).json({ success: false, message: 'Voucher already redeemed' });
     }
