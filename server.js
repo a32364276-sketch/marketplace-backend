@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { Pool } = require('pg');
+const pool = require('./db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const speakeasy = require('speakeasy');
@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const Stripe = require('stripe');
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+const adminRoutes = require('./routes/admin');
 const app = express();
 app.use(cors());
 app.use(express.json({
@@ -18,6 +19,8 @@ app.use(express.json({
     }
   }
 }));
+
+app.use('/admin', adminRoutes);
 
 function authenticateCustomer(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -41,12 +44,6 @@ function authenticateCustomer(req, res, next) {
     return res.status(401).json({ success: false, message: "Invalid token" });
   }
 }
-
-// PostgreSQL connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
 
 // Helper function for login tokens
 function signToken(payload) {
