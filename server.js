@@ -129,6 +129,15 @@ app.post('/admin/login', async (req, res) => {
 app.post('/admin/add-deal', async (req, res) => {
   const { title, description, price, commission_percentage, merchant_id, image_url } = req.body;
 
+const commission = Number(commission_percentage);
+
+if (commission < 0 || commission > 100) {
+  return res.status(400).json({
+    success: false,
+    message: 'Commission must be between 0 and 100'
+  });
+}
+
   if (!title || !price || !merchant_id) {
     return res.status(400).json({ success: false, message: 'Title, price, and merchant_id are required' });
   }
