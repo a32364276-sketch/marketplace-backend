@@ -113,4 +113,44 @@ router.post('/categories', authenticateAdmin, async (req, res) => {
   }
 });
 
+router.get('/merchants', authenticateAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, name, nzbn, role, created_at
+       FROM users
+       WHERE role = 'merchant'
+       ORDER BY created_at DESC`
+    );
+
+    res.json({ success: true, merchants: result.rows });
+  } catch (err) {
+    console.error('Get merchants error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+router.post('/create-merchant', authenticateAdmin, async (req, res) => {
+  const { name, nzbn, password } = req.body;
+
+  if (!name || !nzbn || !password) {
+    return res.status(400).json({ success: false, message: 'name, nzbn, password required' });
+  }
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const result = await pool.query(
+      `INSERT INTO users (name, nzbn, password, role)
+       VALUES ($1, $2, $3, 'merchant')
+       RETURNING id, name, nzbn, role`,
+      [name, nzbn, hashedPassword]
+    );
+
+    res.json({ success: true, merchant: result.rows[0] });
+  } catch (err) {
+    console.error('Create merchant error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 module.exports = router;
