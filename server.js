@@ -532,6 +532,22 @@ app.post('/stripe/webhook', async (req, res) => {
       [customer_id, deal_id, deal.price, session.id]
     );
 
+await pool.query(
+  `UPDATE deals
+   SET sold_count = sold_count + 1
+   WHERE id = $1`,
+  [deal_id]
+);
+
+await pool.query(
+  `UPDATE deals
+   SET active = FALSE
+   WHERE id = $1
+   AND inventory_limit IS NOT NULL
+   AND sold_count >= inventory_limit`,
+  [deal_id]
+);
+
     const order_id = orderRes.rows[0].id;
 
     const public_id = generatePublicId();
