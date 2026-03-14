@@ -277,10 +277,9 @@ app.post('/admin/issue-voucher', async (req, res) => {
     const secret = speakeasy.generateSecret({ length: 20 }).base32;
 
     const inserted = await pool.query(
-  `INSERT INTO vouchers (code, order_id, deal_id, public_id, secret)
-   VALUES ($1, $2, $3, $4, $5)
-   RETURNING id, public_id`,
-  [public_id, order_id, deal_id, public_id, secret]
+  `INSERT INTO vouchers (code, order_id, deal_id, public_id, secret, expires_at)
+   VALUES ($1, $2, $3, $4, $5, $6)`,
+  [public_id, order_id, deal_id, public_id, secret, voucherExpiry]
 );
 
     const code_right_now = speakeasy.totp({
@@ -518,12 +517,22 @@ app.post('/stripe/webhook', async (req, res) => {
     const deal_id = Number(session.metadata.deal_id);
     const customer_id = Number(session.metadata.customer_id);
 
-    const dealRes = await pool.query(
-      `SELECT id, price FROM deals WHERE id = $1`,
-      [deal_id]
-    );
+const dealRes = await pool.query(
+  `SELECT id, price, deal_expiry_date FROM deals WHERE id = $1`,
+  [deal_id]
+);
 
     const deal = dealRes.rows[0];
+
+let voucherExpiry;
+
+if (deal.deal_expiry_date) {
+  voucherExpiry = deal.deal_expiry_date;
+} else {
+  const expiryDate = new Date();
+  expiryDate.setMonth(expiryDate.getMonth() + 3);
+  voucherExpiry = expiryDate;
+}
 
     const orderRes = await pool.query(
       `INSERT INTO orders (customer_id, deal_id, total_price, stripe_session_id, payment_status)
