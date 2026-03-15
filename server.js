@@ -524,6 +524,15 @@ app.post('/stripe/webhook', async (req, res) => {
     const deal_id = Number(session.metadata.deal_id);
     const customer_id = Number(session.metadata.customer_id);
 
+const existingOrder = await pool.query(
+  `SELECT id FROM orders WHERE stripe_session_id = $1 LIMIT 1`,
+  [session.id]
+);
+
+if (existingOrder.rows.length > 0) {
+  return res.status(200).send('Webhook already processed');
+}
+
 const dealRes = await pool.query(
   `SELECT id, price, deal_expiry_date FROM deals WHERE id = $1`,
   [deal_id]
