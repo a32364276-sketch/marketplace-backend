@@ -639,22 +639,6 @@ app.get('/voucher/:public_id/code', authenticateCustomer, async (req, res) => {
   }
 });
 
-const now = Math.floor(Date.now() / 1000);
-const expiresIn = 120 - (now % 120);
-
-    res.json({
-  public_id: voucher.public_id,
-  code,
-  expiresIn,
-  redeemed: voucher.redeemed
-});
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
 app.get('/customer/vouchers', authenticateCustomer, async (req, res) => {
 
   const customerId = req.customer.id;
