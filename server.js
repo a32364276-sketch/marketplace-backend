@@ -594,41 +594,49 @@ await pool.query(
 
 app.get('/voucher/:public_id/code', authenticateCustomer, async (req, res) => {
   const { public_id } = req.params;
-const customerId = req.customer.id;
+  const customerId = req.customer.id;
 
   try {
-  const result = await pool.query(
-  `SELECT v.id, v.public_id, v.secret, v.redeemed
-   FROM vouchers v
-   JOIN orders o ON o.id = v.order_id
-   WHERE v.public_id = $1
-   AND o.customer_id = $2`,
-  [public_id, customerId]
-);
+    const result = await pool.query(
+      `SELECT v.id, v.public_id, v.secret, v.redeemed
+       FROM vouchers v
+       JOIN orders o ON o.id = v.order_id
+       WHERE v.public_id = $1
+       AND o.user_id = $2`,
+      [public_id, customerId]
+    );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, message: 'Voucher not found' });
+      return res.status(404).json({ success: false, message: "Voucher not found" });
     }
 
     const voucher = result.rows[0];
 
-if (!voucher) {
-  return res.status(404).json({ success: false, message: "Voucher not found" });
-}
-
-if (voucher.redeemed) {
-  return res.status(400).json({ success: false, message: "Voucher already redeemed" });
-}
-
     if (voucher.redeemed) {
-      return res.status(400).json({ success: false, message: 'Voucher already redeemed' });
+      return res.status(400).json({ success: false, message: "Voucher already redeemed" });
+    }
+
+    if (!voucher.secret) {
+      return res.status(400).json({ success: false, message: "Voucher secret missing" });
     }
 
     const code = speakeasy.totp({
       secret: voucher.secret,
-      encoding: 'base32',
-      step: 120
+      encoding: "base32",
+      step: 120,
     });
+
+    res.json({
+      success: true,
+      public_id: voucher.public_id,
+      code,
+      redeemed: voucher.redeemed,
+    });
+  } catch (err) {
+    console.error("Voucher code error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
 
 const now = Math.floor(Date.now() / 1000);
 const expiresIn = 120 - (now % 120);
