@@ -8,6 +8,8 @@ const speakeasy = require('speakeasy');
 const crypto = require('crypto');
 const Stripe = require('stripe');
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const cron = require('node-cron');
+const { Resend } = require('resend');
 
 const adminRoutes = require('./routes/admin');
 const app = express();
@@ -1137,5 +1139,67 @@ app.get("/create-test-deal", async (req, res) => {
 });
 
 // Listen on port
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+cron.schedule('* * * * *', async () => {
+  try {
+    const today = new Date();
+
+    if (today.getDate() !== 17) return;
+
+    console.log('Running automated payout email...');
+
+    const result = await pool.query(`
+      SELECT
+        u.name AS merchant_name,
+        u.nzbn,
+        COUNT(v.id) AS redeemed_count,
+        COALESCE(SUM(o.total_price), 0) AS redeemed_sales,
+        COALESCE(SUM(o.total_price * (d.commission_percentage / 100.0)), 0) AS platform_commission,
+        COALESCE(SUM(o.total_price * (1 - d.commission_percentage / 100.0)), 0) AS merchant_amount
+      FROM vouchers v
+      JOIN orders o ON v.order_id = o.id
+      JOIN deals d ON o.deal_id = d.id
+      JOIN users u ON d.merchant_id = u.id
+      WHERE v.redeemed = true
+        AND v.payout_id IS NULL
+        AND v.redeemed_at >= date_trunc('month', CURRENT_DATE) - INTERVAL '1 month' + INTERVAL '19 days'
+        AND v.redeemed_at < date_trunc('month', CURRENT_DATE) + INTERVAL '19 days'
+      GROUP BY u.id, u.name, u.nzbn
+      ORDER BY merchant_amount DESC
+    `);
+
+    const rows = result.rows;
+
+    const totalRedeemedSales = rows.reduce((sum, row) => sum + Number(row.redeemed_sales || 0), 0);
+    const totalCommission = rows.reduce((sum, row) => sum + Number(row.platform_commission || 0), 0);
+    const totalMerchantAmount = rows.reduce((sum, row) => sum + Number(row.merchant_amount || 0), 0);
+
+    const merchantLines = rows.length
+      ? rows.map((row) =>
+          `${row.merchant_name} — Redeemed: ${row.redeemed_count} — Due: $${Number(row.merchant_amount).toFixed(2)}`
+        ).join('<br>')
+      : 'No payouts due.';
+
+    await resend.emails.send({
+      from: 'onboarding@resend.dev',
+      to: process.env.COMPANY_EMAIL,
+      subject: 'Automated payout summary (20th)',
+      html: `
+        <h2>Payout Summary (20th)</h2>
+        <p><strong>Redeemed Sales:</strong> $${totalRedeemedSales.toFixed(2)}</p>
+        <p><strong>Commission:</strong> $${totalCommission.toFixed(2)}</p>
+        <p><strong>Merchant Due:</strong> $${totalMerchantAmount.toFixed(2)}</p>
+        <hr>
+        <p>${merchantLines}</p>
+      `,
+    });
+
+    console.log('Payout email sent');
+  } catch (err) {
+    console.error('Cron payout email error:', err);
+  }
+});

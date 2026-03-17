@@ -11,7 +11,9 @@
     "dotenv": "^16.1.4",
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.3",
+    "node-cron": "^4.2.1",
     "pg": "^8.11.1",
+    "resend": "^6.9.4",
     "speakeasy": "^2.0.0",
     "stripe": "^12.18.0"
   }
