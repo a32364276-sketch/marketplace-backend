@@ -1144,11 +1144,11 @@ app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-cron.schedule('* * * * *', async () => {
+cron.schedule('0 9 * * *', async () => {
   try {
     const today = new Date();
 
-    if (today.getDate() !== 17) return;
+    if (today.getDate() !== 20) return;
 
     console.log('Running automated payout email...');
 
@@ -1174,17 +1174,33 @@ cron.schedule('* * * * *', async () => {
 
     const rows = result.rows;
 
-    const totalRedeemedSales = rows.reduce((sum, row) => sum + Number(row.redeemed_sales || 0), 0);
-    const totalCommission = rows.reduce((sum, row) => sum + Number(row.platform_commission || 0), 0);
-    const totalMerchantAmount = rows.reduce((sum, row) => sum + Number(row.merchant_amount || 0), 0);
+    if (rows.length === 0) {
+      console.log('No payouts due today');
+      return;
+    }
 
-    const merchantLines = rows.length
-      ? rows.map((row) =>
-          `${row.merchant_name} — Redeemed: ${row.redeemed_count} — Due: $${Number(row.merchant_amount).toFixed(2)}`
-        ).join('<br>')
-      : 'No payouts due.';
+    const totalRedeemedSales = rows.reduce(
+      (sum, row) => sum + Number(row.redeemed_sales || 0),
+      0
+    );
 
-    await resend.emails.send({
+    const totalCommission = rows.reduce(
+      (sum, row) => sum + Number(row.platform_commission || 0),
+      0
+    );
+
+    const totalMerchantAmount = rows.reduce(
+      (sum, row) => sum + Number(row.merchant_amount || 0),
+      0
+    );
+
+    const merchantLines = rows
+      .map((row) =>
+        `${row.merchant_name} — Redeemed: ${row.redeemed_count} — Due: $${Number(row.merchant_amount).toFixed(2)}`
+      )
+      .join('<br>');
+
+    const emailResult = await resend.emails.send({
       from: 'onboarding@resend.dev',
       to: process.env.COMPANY_EMAIL,
       subject: 'Automated payout summary (20th)',
@@ -1197,6 +1213,13 @@ cron.schedule('* * * * *', async () => {
         <p>${merchantLines}</p>
       `,
     });
+
+    console.log('CRON EMAIL RESULT:', emailResult);
+
+    if (emailResult.error) {
+      console.error('Cron resend error:', emailResult.error);
+      return;
+    }
 
     console.log('Payout email sent');
   } catch (err) {

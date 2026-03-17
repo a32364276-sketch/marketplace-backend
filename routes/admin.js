@@ -373,19 +373,29 @@ router.post('/payouts/send-summary', authenticateAdmin, async (req, res) => {
         ).join('<br>')
       : 'No unpaid redeemed vouchers found for this payout period.';
 
-    await resend.emails.send({
-      from: 'onboarding@resend.dev',
-      to: process.env.COMPANY_EMAIL,
-      subject: 'Merchant payouts due on the 20th',
-      html: `
-        <h2>Merchant payouts due on the 20th</h2>
-        <p><strong>Redeemed Sales in Period:</strong> $${totalRedeemedSales.toFixed(2)}</p>
-        <p><strong>Platform Commission:</strong> $${totalCommission.toFixed(2)}</p>
-        <p><strong>Merchant Amount Due:</strong> $${totalMerchantAmount.toFixed(2)}</p>
-        <hr>
-        <p>${merchantLines}</p>
-      `,
-    });
+const emailResult = await resend.emails.send({
+  from: 'onboarding@resend.dev',
+  to: process.env.COMPANY_EMAIL,
+  subject: 'Merchant payouts due on the 20th',
+  html: `
+    <h2>Merchant payouts due on the 20th</h2>
+    <p><strong>Redeemed Sales in Period:</strong> $${totalRedeemedSales.toFixed(2)}</p>
+    <p><strong>Platform Commission:</strong> $${totalCommission.toFixed(2)}</p>
+    <p><strong>Merchant Amount Due:</strong> $${totalMerchantAmount.toFixed(2)}</p>
+    <hr>
+    <p>${merchantLines}</p>
+  `,
+});
+
+console.log('EMAIL RESULT:', emailResult);
+
+if (emailResult.error) {
+  console.error('Resend error:', emailResult.error);
+  return res.status(400).json({
+    success: false,
+    message: emailResult.error.message || 'Failed to send email',
+  });
+}
 
     res.json({ success: true, message: 'Payout summary email sent' });
   } catch (err) {
