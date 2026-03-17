@@ -626,15 +626,16 @@ app.get('/voucher/:public_id/code', authenticateCustomer, async (req, res) => {
       step: 120,
     });
 
-    res.json({
+    return res.json({
       success: true,
       public_id: voucher.public_id,
       code,
       redeemed: voucher.redeemed,
     });
+
   } catch (err) {
     console.error("Voucher code error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
