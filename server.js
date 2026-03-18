@@ -602,40 +602,65 @@ app.get('/voucher/:public_id/code', authenticateCustomer, async (req, res) => {
        FROM vouchers v
        JOIN orders o ON o.id = v.order_id
        WHERE v.public_id = $1
-       AND o.user_id = $2`,
+         AND o.customer_id = $2`,
       [public_id, customerId]
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, message: "Voucher not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Voucher not found",
+      });
     }
 
     const voucher = result.rows[0];
 
     if (voucher.redeemed) {
-      return res.status(400).json({ success: false, message: "Voucher already redeemed" });
+      return res.status(400).json({
+        success: false,
+        message: "Voucher already redeemed",
+      });
     }
 
     if (!voucher.secret) {
-      return res.status(400).json({ success: false, message: "Voucher secret missing" });
+      return res.status(400).json({
+        success: false,
+        message: "Voucher secret missing",
+      });
     }
 
-    const code = speakeasy.totp({
-      secret: voucher.secret,
-      encoding: "base32",
-      step: 120,
-    });
+    let code;
+
+    try {
+      code = speakeasy.totp({
+        secret: voucher.secret,
+        encoding: "base32",
+        step: 120,
+      });
+    } catch (totpError) {
+      console.error("TOTP generation error:", totpError);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to generate voucher code",
+      });
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const expiresIn = 120 - (now % 120);
 
     return res.json({
       success: true,
       public_id: voucher.public_id,
       code,
+      expiresIn,
       redeemed: voucher.redeemed,
     });
-
   } catch (err) {
     console.error("Voucher code error:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 });
 
