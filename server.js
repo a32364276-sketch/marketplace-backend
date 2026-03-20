@@ -487,8 +487,8 @@ const customer_id = req.customer.id;
           quantity: 1,
         },
       ],
-      success_url: "http://localhost:3000/success",
-      cancel_url: "http://localhost:3000",
+success_url: `${process.env.FRONTEND_URL}/success`,
+cancel_url: `${process.env.FRONTEND_URL}/`,
       metadata: {
         deal_id: String(deal_id),
         customer_id: String(customer_id),
