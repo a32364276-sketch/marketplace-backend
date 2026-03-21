@@ -356,7 +356,10 @@ if (row.expires_at && new Date(row.expires_at) < new Date()) {
       return res.status(400).json({ success: false, message: 'Invalid or expired code' });
     }
 
-    await pool.query(`UPDATE vouchers SET redeemed = TRUE, redeemed_at = NOW() WHERE id = $1`, [row.voucher_id]);
+    await pool.query(`UPDATE vouchers
+SET redeemed = TRUE,
+    redeemed_at = NOW() AT TIME ZONE 'UTC'
+WHERE id = $1`, [row.voucher_id]);
 
     res.json({ success: true, message: 'Voucher redeemed ✅' });
   } catch (err) {
